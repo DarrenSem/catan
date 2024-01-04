@@ -1,4 +1,4 @@
-# catan.html - Settlers of Catan map generator https://DarrenSem.github.io/catan/
+# catan.html - The *Faster* Settlers of Catan map generator https://DarrenSem.github.io/catan/
 
 For normal and 5/6 player expansion set.
 
