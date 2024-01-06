@@ -17,7 +17,7 @@ let DEBUG_RUNS_FILLTILES = 1;
 
 
 
-const DEBUG_SKIP_FILLTILES_ON_LOAD = !!"DEBUG_SKIP_FILLTILES_ON_LOAD"; // useful during testing of OPTIONS with RandomWithSeed
+const DEBUG_SKIP_FILLTILES_ON_LOAD = !"DEBUG_SKIP_FILLTILES_ON_LOAD"; // useful during testing of OPTIONS with RandomWithSeed
 
 const DEBUG_INITIAL_resource_multiple_6_8 = !"DEBUG_INITIAL_resource_multiple_6_8";
 // e.g. seed12 = 20 - 50 SECONDS due to resource_multiple_6_8: false
@@ -336,9 +336,6 @@ updateMapMode(
 
 
 
-// let globalSeed;
-// globalSeed = 42;
-
 // >>> IN CONCLUSION, if PERFECTION re. periodization is most important use 2ndCombo (4294967296) else 1st (233280)
 let createRandomWithSeed_FASTER_REPEATS_EARLY=s=>(s=Math.abs(isNaN(s)?Date.now():s),_=>(s=(9301*s+49297)%233280,s/233280));
 // let createRandomWithSeed_SLOWER_REPEATS_LATER=s=>(s=Math.abs(isNaN(s)?Date.now():s),_=>(s=(1664525*s+1013904223)%4294967296,s/4294967296));
@@ -347,11 +344,8 @@ const createRandomWithSeed = createRandomWithSeed_FASTER_REPEATS_EARLY;
 
 const MathRandom = Math.random;
 // CONFIRMED: one-time pre-cached "Math.random" alias = faster, because no OBJECT.KEY lookup each time
-// const random = DEBUG_USE_RANDOM_WITH_SEED ? randomWithSeed : MathRandom;
-// if(random === randomWithSeed)globalSeed = DEBUG_RANDOM_SEED;
+
 const random = DEBUG_USE_RANDOM_WITH_SEED ? createRandomWithSeed(DEBUG_RANDOM_SEED) : MathRandom;
-
-
 
 // shuffleInPlace() is used to randomize both the resources and the numbers.
 // Following that, it shuffles the Tiles array created in generateTileContent().
@@ -578,48 +572,10 @@ const shuffleIsValid = tilesArray => {
   for (let boardLocation = 0, L = tilesArray.length; boardLocation < L; boardLocation ++) {
     const tile = tilesArray[boardLocation];
 
-    const chit = tile.chit;
     const resource = tile.resource;
-    
+
     const nearbyListHigherIndexOnly = globalAdjacencyHigherIndexOnly[boardLocation];
-
-    // FIRST check the Resource adjacencies ("the expansion pack can not use this setting")
-    if (globalMapMode === "normal" && !adjacent_same_resource) {
-      // if (!passedResourceCheck(tiles, 1)) { // Checks if any two of its adjacent tiles are of the same resource
-      const nearbyListAll = globalAdjacencyAll[boardLocation];
-      let count = 1;
-      for (let i = 0, N = nearbyListAll.length; i < N; i++) {
-        if (resource === tilesArray[nearbyListAll[i]].resource) {
-          if (++count > 1) return false;
-        };
-      };
-    };
-
-    /// [previous] order of highest..lowest frequency of FAILURE = Resource, 6/8, regNum, multi, 2/12, desert
-    //       debugStack.fail_68_count:  903265 1271127 5156137 7004176   4554560 3864993 |Ext: 1417502
-    //                .fail_212_count:  257405  362217 1468118 1995046   1294927 1101868 |Ext: 1018287
-    //      .fail_desert_center_count:       0   78537  318895  426550    280957  235630 |Ext:  372884
-    //        .fail_multiple_68_count:       0       0       0       0   3870992 3284777 |Ext:  540591
-    //             .fail_regNum_count:  854811 1202680 4875441 6621241   4307977 3652840 |Ext: 1418343
-    // debugStack.fail_resource_count: 1046827 1472817 5972597 8114842   5275926 4477734 |Ext: 1394302
-    // ^ "normal" mode; for "" Extension 'fail_68' is slightly more frequent than fail_resource (but _multiple_ is like 10X MORE RARE now!)
-
-    // ...therefore... THIRD check all of the other "non-special" numbers
-
-    if (!adjacent_same_numbers) {
-      // reminder: globalRegularNumbers = [3, 4, 5, 9, 10, 11];
-      for (let i = 0, L = globalRegularNumbers.length; i < L; i++) {
-        const regNum = globalRegularNumbers[i];
-        // check adjacent tiles for same numbers ("regular" numbers AKA not 6/8/2/12)
-        // if (!passedAdjacencyTest(tiles, regNum, regNum, alsoCheckMultiple68--)) {
-        if (chit === regNum) {
-          for (let i = 0, N = nearbyListHigherIndexOnly.length; i < N; i++) {
-            if (tilesArray[nearbyListHigherIndexOnly[i]].chit === regNum) return false;
-          };
-        };
-      };
-
-    };
+    const chit = tile.chit;
 
     switch (chit) {
 
@@ -680,21 +636,69 @@ const shuffleIsValid = tilesArray => {
         // if (!passedDesertCheck(tiles, centerIndexes = globalMapMode === "normal" ? [9] : [11, 14, 15, 18])) {
 
         // New house rule: confirm desert is not in the center (Expansion = any of the *4* center tiles).
-        if (!desert_in_center && (
-          globalMapMode === "normal"
-            ? 9 === boardLocation
-            : desertCenterIndexesExpansion.includes(boardLocation)
-        )) {
-          // console.log({ boardLocation }, desertCenterIndexesExpansion, tilesArray);
-          // debugger;
-          return false;
+        if (!desert_in_center) {
+          if (
+            globalMapMode === "normal"
+              ? 9 === boardLocation
+              : desertCenterIndexesExpansion.includes(boardLocation)
+          ) {
+            // console.log({ boardLocation }, desertCenterIndexesExpansion, tilesArray);
+            // debugger;
+            return false;
+          };
         };
 
         break;
 
     }; // switch (chit) {
 
+
+
+    // NOTE: *most* tests run 5-10% faster if adjacent_same_numbers is checked BEFORE adjacent_same_resource
+
+    /// [previous] order of highest..lowest frequency of FAILURE = Resource, 6/8, regNum, multi, 2/12, desert
+    //       debugStack.fail_68_count:  903265 1271127 5156137 7004176   4554560 3864993 |Ext: 1417502
+    //                .fail_212_count:  257405  362217 1468118 1995046   1294927 1101868 |Ext: 1018287
+    //      .fail_desert_center_count:       0   78537  318895  426550    280957  235630 |Ext:  372884
+    //        .fail_multiple_68_count:       0       0       0       0   3870992 3284777 |Ext:  540591
+    //             .fail_regNum_count:  854811 1202680 4875441 6621241   4307977 3652840 |Ext: 1418343
+    // debugStack.fail_resource_count: 1046827 1472817 5972597 8114842   5275926 4477734 |Ext: 1394302
+    // ^ "normal" mode; for "" Extension 'fail_68' is slightly more frequent than fail_resource (but _multiple_ is like 10X MORE RARE now!)
+    // ^ ...therefore...
+
+    // THIRD check all of the other "non-special" numbers
+    if (globalRegularNumbers.includes(chit)) {
+      // reminder: globalRegularNumbers = [3, 4, 5, 9, 10, 11];
+      if (!adjacent_same_numbers) {
+        // check adjacent tiles for same numbers ("regular" numbers AKA not 6/8/2/12)
+        // if (!passedAdjacencyTest(tiles, regNum, regNum, alsoCheckMultiple68--)) {
+        for (let i = 0, N = nearbyListHigherIndexOnly.length; i < N; i++) {
+          if (chit === tilesArray[nearbyListHigherIndexOnly[i]].chit) return false;
+        };
+      };
+    };
+
+    // FIRST check the Resource adjacencies ("the expansion pack can not use this setting")
+    if (globalMapMode === "normal") {
+      if (!adjacent_same_resource) { // MOST LIKELY / MOST FREQUENT CAUSE OF FAILURE so put this at TOP (in theory)
+        // if (!passedResourceCheck(tiles, 1)) { // Checks if any two of its adjacent tiles are of the same resource
+        const nearbyListAll = globalAdjacencyAll[boardLocation];
+        let count = 1;
+        for (let i = 0, N = nearbyListAll.length; i < N; i++) {
+          if (resource === tilesArray[nearbyListAll[i]].resource) {
+            if (++count > 1) return false;
+          };
+        };
+      };
+    };
+
+    // NOTE: *most* tests run 5-10% faster if adjacent_same_numbers is checked BEFORE adjacent_same_resource
+    // ^ "1 * 12" (SEED 52) = 17238.3391 ms instead of 17387.2612 ms
+    // ^ "1 * 50" AKA 5 * 10= 48407 ms instead of 49071, 56581 ms instead of 57857 ms
+
   }; // for (let boardLocation = 0, L = tilesArray.length; boardLocation < L; boardLocation ++) {
+
+
 
   // during TESTING/stats *only*, because it is WAY faster to "early exit" via "return false" AS SOON AS FAIL.
   // if(
