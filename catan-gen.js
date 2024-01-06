@@ -17,7 +17,7 @@ let DEBUG_RUNS_FILLTILES = 1;
 
 
 
-const DEBUG_SKIP_FILLTILES_ON_LOAD = !"DEBUG_SKIP_FILLTILES_ON_LOAD"; // useful during testing of OPTIONS with RandomWithSeed
+const DEBUG_SKIP_FILLTILES_ON_LOAD = !!"DEBUG_SKIP_FILLTILES_ON_LOAD"; // useful during testing of OPTIONS with RandomWithSeed
 
 const DEBUG_INITIAL_resource_multiple_6_8 = !"DEBUG_INITIAL_resource_multiple_6_8";
 // e.g. seed12 = 20 - 50 SECONDS due to resource_multiple_6_8: false
@@ -830,7 +830,28 @@ const test_js_only = () => {
 // Start the board. Do this when page is first opened, or when mode is changed.
 const initialLoadEventName = !!"LOAD" ? "load" : "DOMContentLoaded";
 
+const CSSpreloadClasses = (doc, msDelay, ...classes) => {
+  let el, loadNextClass = () => (
+    classes.length
+    ? setTimeout(
+      loadNextClass,
+      msDelay,
+      el.className = classes.shift()
+    )
+    : doc.body.removeChild(el)
+  );
+
+  return doc.body && loadNextClass(
+    classes = classes.flat(),
+    doc.body.appendChild(
+      el = doc.createElement("span")
+    )
+  );
+};
+
 const initialLoad = evt => {
+
+  CSSpreloadClasses(doc, 9, globalResourceTypes);
 
   const skipFillTiles = DEBUG_SKIP_FILLTILES_ON_LOAD
   && ( !!evt || !"evt NOT passed therefore NEVER skipFillTiles" );
