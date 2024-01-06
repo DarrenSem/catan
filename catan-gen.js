@@ -572,10 +572,10 @@ const shuffleIsValid = tilesArray => {
   for (let boardLocation = 0, L = tilesArray.length; boardLocation < L; boardLocation ++) {
     const tile = tilesArray[boardLocation];
 
+    const chit = tile.chit;
     const resource = tile.resource;
 
     const nearbyListHigherIndexOnly = globalAdjacencyHigherIndexOnly[boardLocation];
-    const chit = tile.chit;
 
     switch (chit) {
 
@@ -683,10 +683,10 @@ const shuffleIsValid = tilesArray => {
       if (!adjacent_same_resource) { // MOST LIKELY / MOST FREQUENT CAUSE OF FAILURE so put this at TOP (in theory)
         // if (!passedResourceCheck(tiles, 1)) { // Checks if any two of its adjacent tiles are of the same resource
         const nearbyListAll = globalAdjacencyAll[boardLocation];
-        let count = 1;
+        let nearbySameResourceCount = 0;
         for (let i = 0, N = nearbyListAll.length; i < N; i++) {
           if (resource === tilesArray[nearbyListAll[i]].resource) {
-            if (++count > 1) return false;
+            if (++nearbySameResourceCount > 0) return false;
           };
         };
       };
