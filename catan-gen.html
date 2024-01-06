@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+
+<html lang="en">
+
+<head>
+
+  <meta property="og:image" content="./favicon.ico">
+  <link rel="icon" href="./favicon.ico" type="image/x-icon" />
+
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="X-UA-Compatible" content="ie=edge">
+  <title>split: Catan Map Generator (with extra settings for our house rules) - Settlers of Catan Board Builder</title>
+  <meta name="description"
+  content="Settlers of Catan Map Generator for normal and expansion. Speed* and feature improvements by Darren Semotiuk, original by Jamison Bunge.">
+
+</head>
+
+<body>
+
+    <header class="newTitle" id="title">
+        <h2>The Faster Catan Generator</h2>
+        <nav class="myNav">
+
+          <ul>
+            <li class="myLi">
+              <p style="font-size:80%">Speed* and feature improvements by Darren Semotiuk.
+                <br /><a style="font-size: 50%" class="links" href="https://github.com/DarrenSem/catan" target="_blank">&lt;source&gt;</a> <a style="font-size: 50%" class="links" href="https://www.bunge.io" target="_blank">(based on original by Jamison Bunge)</a></p>
+              <p style="font-size: 70%">*Warning: unchecking "Resource Can Have <span id="multi_1">2+</span> of 6/8" is SLOW</p>
+            </li>
+          </ul>
+
+        </nav>
+        <div class="description">
+            Map generator for Settlers of Catan (normal and expansion pack); use options to build what works for your house rules.
+        </div>
+        <section id="inline-options">
+            <button id="btnOps" type="button" class="commonOpsbutton" onclick="toggleOptionsPopup()">Options</button>
+            <button id="btnBuild" disabled type="button" class="commonShuffle" onclick="generateBoard(this)">&nbsp;</button>
+        </section>
+    </header>
+
+    <section class="commonNormalBoard board" id="board"></section>
+
+    <section id="popmenu" class="menuToggle" style="display:none">
+      <h2>Generation Custom Rules</h2><br>
+      <div class="settingswrap">
+    
+        <div class="menu-row">
+          <label for="pick-mode" class="mylabel">Map Type:</label>
+          <select class="mySelect" onchange="selectMode()" id="pick-mode">
+            <option value="normal" default>Normal</option>
+            <option value="">Expansion</option>
+          </select><br>
+        </div>
+    
+        <div class="menu-row">
+          <label for="adjacent_6_8_input" class="mylabel">6 & 8 Can Touch</label>
+          <input id="adjacent_6_8_input" onchange="toggleSetting('6_8')" type="checkbox"><br>
+        </div>
+    
+        <div class="menu-row">
+          <label for="adjacent_2_12_input" class="mylabel">2 & 12 Can Touch</label>
+          <input id="adjacent_2_12_input" onchange="toggleSetting('2_12')" type="checkbox"><br>
+        </div>
+    
+        <div class="menu-row">
+          <label for="adjacent_same_numbers_input" class="mylabel">Same Numbers Can Touch</label>
+          <input id="adjacent_same_numbers_input" onchange="toggleSetting('same_number')" type="checkbox"><br>
+        </div>
+    
+        <div class="menu-row" id="sameResourceSetting">
+          <label for="adjacent_same_resource_input" class="mylabel">Same Resource Can Touch</label>
+          <input id="adjacent_same_resource_input" onchange="toggleSetting('same_resource')" type="checkbox"><br>
+        </div>
+    
+        <div class="menu-row">
+          <label for="desert_in_center_input" class="mylabel">Desert Can Be In Center</label>
+          <input id="desert_in_center_input" onchange="toggleSetting('desert_center')" type="checkbox"><br>
+        </div>
+    
+        <div class="menu-row">
+          <label for="resource_multiple_6_8_input" class="mylabel">Resource Can Have <span id="multi_2">2+</span> of 6/8</label>
+          <input id="resource_multiple_6_8_input" onchange="toggleSetting('multiple_6_8')" type="checkbox"><br>
+        </div>
+    
+        <button type="button" class="menuclosebutton" onclick="toggleOptionsPopup()">Close Options</button>
+    
+      </div>
+    
+    </section>
+
+    <footer></footer>
+
+<script type="text/javascript" src="./catan-gen.js"></script>
+
+<link rel="stylesheet" type="text/css" href="./catan-gen.css">
+
+</body>
+
+</html>
