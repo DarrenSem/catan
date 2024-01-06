@@ -851,7 +851,7 @@ const CSSpreloadClasses = (doc, msDelay, ...classes) => {
 
 const initialLoad = evt => {
 
-  // CSSpreloadClasses(doc, 9, globalResourceTypes);
+  CSSpreloadClasses(doc, 9, globalResourceTypes);
 
   const skipFillTiles = DEBUG_SKIP_FILLTILES_ON_LOAD
   && ( !!evt || !"evt NOT passed therefore NEVER skipFillTiles" );
