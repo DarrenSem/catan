@@ -15,19 +15,22 @@ let DEBUG_RUNS_FILLTILES = 1;
 // DEBUG_RUNS_FILLTILES = 1 * 12; // "instantly" (2730ms) = "wheat" = 8 6 6 5 10 12 = fail_multiple_68_count (Extension "" mode)
 // ^ these MULTIPLE RUNS test cases use DEBUG_RANDOM_SEED = 52; // takes longer than 42 (950ms for 5 runs)
 
-
-
 const DEBUG_SKIP_FILLTILES_ON_LOAD = !"DEBUG_SKIP_FILLTILES_ON_LOAD"; // useful during testing of OPTIONS with RandomWithSeed
 
 const DEBUG_INITIAL_resource_multiple_6_8 = !"DEBUG_INITIAL_resource_multiple_6_8";
 // e.g. seed12 = 20 - 50 SECONDS due to resource_multiple_6_8: false
 // but [1880ms 2033ms 2225ms 2368ms] etc. when set to resource_multiple_6_8: true
 
-const DEBUG_USE_RANDOM_WITH_SEED = !"DEBUG_USE_RANDOM_WITH_SEED";
+
+const DEBUG_USE_RANDOM_WITH_SEED = !"DEBUG_USE_RANDOM_WITH_SEED"; // for randomDefault; might be ignored later by random = createRandomWithSeed(lookupFastSeed())
+const DEBUG_SKIP_LOOKUP_FAST = !"DEBUG_SKIP_LOOKUP_FAST"; // ^ to TEST/verify seed's resulting map, MUST skip createRandomWithSeed(lookupFastSeed()) if optionsAllUncheckedAndNormalMap()
 let DEBUG_RANDOM_SEED;
 // DEBUG_RANDOM_SEED = 42 * 101; // and even this is optional
 // DEBUG_RANDOM_SEED = 42;
-DEBUG_RANDOM_SEED = 52; // takes longer than 42 (950ms for 5 runs)
+DEBUG_RANDOM_SEED = 52; // slower than 42 (5 runs 950ms) {DEBUG_RUNS = 1 @ all unchecked: [11 5 9 ... 4 8 11]}
+
+const DEBUG_SEEDS_TRACK = !"DEBUG_SEEDS_TRACK" && DEBUG_USE_RANDOM_WITH_SEED;  // required by calcFastSeedsForNormalMap(); DEBUG_SEEDS_TRACK && debugStack.seeds.push(s),  // add to debugStack.fastSeedArrayForNormalMap -- later used by lookupFastSeed()
+
 
 const mapModeDefault = !"DEBUG_MAP_MODE_DEFAULT_EXPANDED" ? "" : "normal";
 
@@ -48,8 +51,9 @@ const DEBUG_BENCH_ONLY = !"DEBUG_BENCH_ONLY", BENCH = () => {
   return result;
 };
 
-const debugStack = [];
 
+
+const debugStack = [];
 // during TESTING/stats *only*, because it is WAY faster to "early exit" via "return false" AS SOON AS FAIL.
 // debugStack.attempted_count = 0;
 // debugStack.fail_resource_count = 0;
@@ -60,6 +64,11 @@ const debugStack = [];
 // debugStack.fail_desert_center_count = 0;
 // debugStack.fail_multiple_68_count = 0;
 // ^ during TESTING/stats *only*, because it is WAY faster to "early exit" via "return false" AS SOON AS FAIL.
+if(DEBUG_SEEDS_TRACK) {
+  debugStack.seeds = [];
+  debugStack.firstSeed = null; // later will compare strictly: if(debugStack.firstSeed === null) {
+  debugStack.fastSeedArrayForNormalMap = [];
+};
 
 
 
@@ -84,7 +93,7 @@ const CONFIG = {
 };
 
 // .log = (t0, t1, fnRan, runs, args, storedStats) => {...} other optional .props: [runs=1000, now=()=>performance.now(), log = void fn(t0, t1, fnRan, args, storedStats) ]
-const bench=(a,...b)=>{let c,d,e,f=bench,g=[],h=f.log||((a,b,c,d,e,f)=>{let g=`${(b-a).toFixed(3)} ms\truns = ${d}\t${c.name||c+""}`,h=!e.length;console.log(f[f.push(g)-1],h?"":"\t[...args] =",h?"":e)}),i=f.now??((a,b)=>(a="performance",b=globalThis[a],(b??require("perf_hooks")[a]).now.bind(b)))(),j=f.runs||1e3;return a.forEach(a=>{if("function"!=typeof a)throw TypeError("Every element of 1st argument `fnArray` must be a function:\t"+a);for(d=i(),c=0;c<j;c++)a(...b);e=i(),h(d,e,a,j,b,g)}),g};
+const bench=(a,...b)=>{let c,d,e,f=bench,g=[],h=f.log||((a,b,c,d,e,f)=>{let g=`${(b-a).toFixed(3)} ms\truns = ${d}\t${c.name||c+""}`,h=!e.length;console.info(f[f.push(g)-1],h?"":"\t[...args] =",h?"":e)}),i=f.now??((a,b)=>(a="performance",b=globalThis[a],(b??require("perf_hooks")[a]).now.bind(b)))(),j=f.runs||1e3;return a.forEach(a=>{if("function"!=typeof a)throw TypeError("Every element of 1st argument `fnArray` must be a function:\t"+a);for(d=i(),c=0;c<j;c++)a(...b);e=i(),h(d,e,a,j,b,g)}),g};
 
 // Calculate the offsets of each hex, then update 'globalOffsetsLeftTop'.
 const updateOffsetsLeftTopCSS = () => {
@@ -209,8 +218,64 @@ let globalMapMode = "?";
 let globalAdjacencyAll = {}; // used to check the Resource adjacencies
 let globalAdjacencyHigherIndexOnly = {}; // used to check adjacent tiles for same numbers (6/8, or 2/12, or all other "regular" numbers)
 let globalOffsetsLeftTop = [];
+let NUM_ARRAY = [];
+let RESOURCE_ARRAY = [];
 let globalNumArray = [];
 let globalResourceArray = [];
+let globalDuration = 0;
+
+let fastSeedArray; // populated once inside updateMapMode(mode = "normal")
+let fastSeedPrev;
+let lookupFastSeed = () => {
+  // console.time("lookupFastSeed");
+  let fastSeedNext = fastSeedPrev, L = fastSeedArray.length;
+  while(L > 1 && fastSeedNext === fastSeedPrev) {
+    // "calc | 0" faster than "Math.floor(calc)": bitwise math, no OBJECT.KEY lookup
+    fastSeedNext = fastSeedArray[MathRandom() * L | 0];
+  };
+  // console.timeEnd("lookupFastSeed"); // lookupFastSeed: 0.005859375 ms
+  return fastSeedPrev = fastSeedNext;
+};
+/*
+// \/ Usage example: calcFastSeedsForNormalMap(5001, 10_000, 500); // TODO: future? Since maps rn = 1281 (previously 699) (seed 1..5000)
+const calcFastSeedsForNormalMap = (seedMin, seedMax, durationMaxMs) => {
+  if(DEBUG_SEEDS_TRACK && durationMaxMs) {
+    debugStack.fastSeedArrayForNormalMap = [];
+    for(let seed = seedMin; seed <= seedMax; seed ++) {
+      console.info("calcFastSeedsForNormalMap:", seed, "of", seedMax);
+      fillTiles(seed, durationMaxMs);
+    };
+    console.info( "debugStack.fastSeedArrayForNormalMap:", JSON.stringify( debugStack.fastSeedArrayForNormalMap, 0, "  " ) );
+  };
+};
+// let arrayOfFastSeedObjects = [  // AKA debugStack.fastSeedArrayForNormalMap
+//   {
+//     "69": 269.7000002861023
+//   },
+//   {
+//     "71": 186.5
+//   },
+//   {
+//     "70": 486.5
+//   }
+// ];
+let arrayOfFastSeedObjects = debugStack.fastSeedArrayForNormalMap;
+
+// let fastSeedsO = {69: 1, 70: 1, 71: 1};
+let fastSeedsO = arrayOfFastSeedObjects
+.reduce( (acc, obj) => {
+  const key = +Object.keys(obj)[0];
+  acc[key] = 1; // acc[key] = obj[key];
+  return acc;
+}, {} );
+// let fastSeedArrayNEW = [69, 70, 71];
+let fastSeedArrayNEW = Object.keys(fastSeedsO)
+.reduce( (acc, obj) => {
+  acc.push( +obj );
+  return acc;
+}, [] );
+console.info( "fastSeedArrayNEW:", fastSeedArrayNEW );
+*/
 
 // My new combined function to update globalMapMode and a few other global values J Bunge's code was using.
 // e.g. the adjacency list is retrieved, and the offsets are retrieved.
@@ -227,12 +292,12 @@ const updateMapMode = mode => { // ONLY if mode is DIFFERENT than globalMapMode 
   updateOffsetsLeftTopCSS();
 
   // Selects appropriate number and resource arrays depending on the board's globalMapMode.
-  globalNumArray = (
+  NUM_ARRAY = (
     globalMapMode === "normal"
     ? [2, 3, 3, 4, 4, 5, 5, 6, 6, 8, 8, 9, 9, 10, 10, 11, 11, 12]
     : [2, 2, 3, 3, 3, 4, 4, 4, 5, 5, 5, 6, 6, 6, 8, 8, 8, 9, 9, 9, 10, 10, 10, 11, 11, 11, 12, 12]
   );
-  globalResourceArray = (
+  RESOURCE_ARRAY = (
     globalMapMode === "normal"
     ? ["ore", "ore", "ore", "brick", "brick", "brick", "sheep", "sheep", "sheep", "sheep", "wood", "wood", "wood", "wood", "wheat", "wheat", "wheat", "wheat"]
     : ["ore", "ore", "ore", "ore", "ore", "brick", "brick", "brick", "brick", "brick", "sheep", "sheep", "sheep", "sheep", "sheep", "sheep", "wood", "wood", "wood", "wood", "wood", "wood", "wheat", "wheat", "wheat", "wheat", "wheat", "wheat"]
@@ -245,6 +310,12 @@ const updateMapMode = mode => { // ONLY if mode is DIFFERENT than globalMapMode 
   // previously updateSettingVisibilityForSameResourceCanTouch(globalMapMode);
   const sameResourceClasses = doc.getElementById("sameResourceSetting").classList;
   if (globalMapMode === "normal") {
+    // console.time("populate fastSeedArray");
+    if (!fastSeedArray) fastSeedArray = [
+      2,3,4,16,20,23,29,33,34,35,39,42,48,49,52,55,64,65,69,71,73,77,99,105,106,111,114,116,117,121,123,129,130,133,134,141,143,145,148,154,155,157,161,167,174,177,181,182,183,184,186,188,201,204,214,218,219,222,224,227,232,247,252,257,259,262,263,264,265,278,282,283,285,288,293,299,303,306,311,313,317,322,324,349,354,358,361,367,371,372,378,387,389,393,394,401,402,403,407,417,418,419,423,433,437,439,441,457,467,471,472,475,484,493,496,501,503,509,516,519,522,527,531,537,540,543,545,546,547,555,556,560,564,570,574,575,584,586,589,592,594,595,596,599,600,602,604,609,610,619,622,624,625,628,633,638,642,646,650,653,654,659,662,664,665,666,668,672,679,680,681,688,690,695,698,699,704,708,709,713,716,718,726,727,730,732,736,737,738,739,745,747,748,750,751,756,765,776,778,779,785,786,798,800,801,804,806,807,812,815,816,818,825,826,828,830,834,838,849,851,855,864,867,868,872,875,879,886,889,890,893,897,898,902,903,904,906,907,908,909,913,914,921,923,928,929,933,943,946,950,953,963,981,985,997,1006,1010,1024,1027,1030,1033,1035,1036,1038,1040,1046,1050,1053,1056,1057,1064,1066,1069,1070,1072,1073,1089,1090,1094,1099,1100,1104,1109,1111,1129,1134,1135,1137,1138,1139,1151,1156,1157,1161,1164,1168,1169,1175,1178,1179,1180,1182,1185,1190,1199,1203,1204,1209,1210,1215,1219,1222,1225,1227,1228,1230,1240,1243,1246,1247,1250,1251,1256,1261,1263,1264,1268,1274,1280,1285,1287,1288,1290,1295,1297,1298,1300,1302,1304,1306,1308,1318,1322,1328,1332,1333,1339,1342,1343,1350,1354,1356,1358,1364,1368,1370,1378,1379,1381,1384,1389,1391,1394,1395,1402,1403,1404,1405,1409,1411,1414,1418,1420,1421,1424,1425,1433,1440,1443,1449,1452,1453,1456,1462,1467,1470,1473,1484,1497,1499,1500,1508,1509,1510,1512,1520,1523,1541,1545,1546,1547,1553,1561,1562,1565,1569,1575,1582,1587,1591,1597,1601,1611,1614,1616,1623,1626,1631,1638,1639,1644,1648,1663,1668,1670,1671,1672,1676,1683,1684,1694,1704,1706,1708,1713,1719,1729,1730,1733,1734,1735,1737,1738,1749,1751,1752,1757,1763,1764,1765,1771,1779,1784,1788,1794,1810,1811,1813,1820,1825,1831,1843,1855,1856,1861,1864,1876,1878,1889,1891,1895,1898,1901,1903,1905,1907,1908,1909,1918,1919,1921,1924,1933,1937,1940,1948,1949,1954,1957,1958,1972,1974,1981,1983,1987,1992,1994,1997,1999,2001,2007,2017,2019,2027,2031,2032,2041,2046,2047,2049,2060,2071,2072,2075,2076,2079,2081,2100,2102,2105,2106,2107,2108,2113,2117,2122,2123,2127,2134,2136,2137,2149,2151,2157,2161,2172,2178,2181,2183,2184,2190,2194,2197,2198,2205,2214,2219,2224,2230,2236,2240,2241,2244,2251,2259,2262,2264,2265,2266,2268,2269,2274,2279,2283,2288,2291,2298,2301,2306,2315,2333,2335,2345,2346,2359,2363,2367,2372,2374,2381,2389,2391,2393,2402,2414,2431,2436,2437,2438,2446,2457,2458,2460,2474,2476,2477,2479,2487,2488,2491,2495,2497,2500,2501,2505,2508,2510,2516,2521,2525,2527,2536,2537,2564,2565,2566,2569,2571,2572,2576,2580,2585,2595,2598,2599,2600,2603,2607,2622,2623,2633,2634,2636,2640,2649,2657,2670,2671,2681,2693,2695,2707,2710,2712,2716,2718,2728,2731,2735,2740,2752,2763,2766,2770,2779,2781,2784,2789,2794,2795,2797,2801,2807,2815,2820,2821,2830,2852,2854,2855,2856,2857,2862,2865,2870,2872,2880,2885,2891,2897,2902,2910,2915,2918,2921,2922,2923,2943,2949,2951,2953,2958,2964,2965,2970,2972,2977,2979,2982,
+      3001,3002,3003,3004,3005,3013,3016,3024,3025,3026,3031,3034,3039,3040,3053,3055,3057,3064,3065,3068,3070,3077,3080,3081,3082,3084,3097,3100,3101,3106,3108,3110,3111,3113,3114,3119,3120,3123,3124,3127,3132,3133,3134,3136,3137,3144,3151,3152,3158,3163,3169,3170,3173,3179,3187,3189,3191,3193,3197,3198,3210,3214,3222,3227,3232,3234,3238,3240,3244,3254,3268,3274,3277,3280,3282,3287,3289,3291,3292,3293,3297,3305,3306,3309,3316,3317,3321,3332,3336,3340,3343,3350,3352,3353,3354,3356,3359,3364,3368,3372,3375,3376,3377,3388,3393,3397,3403,3405,3408,3409,3410,3411,3412,3414,3415,3416,3417,3418,3421,3422,3424,3434,3438,3440,3441,3448,3450,3451,3453,3457,3461,3462,3463,3464,3469,3473,3475,3478,3483,3485,3488,3493,3499,3505,3507,3510,3518,3519,3521,3522,3523,3543,3545,3550,3551,3554,3564,3575,3576,3582,3586,3589,3595,3604,3607,3611,3615,3616,3617,3619,3620,3621,3626,3630,3632,3642,3644,3648,3651,3654,3660,3661,3663,3664,3675,3678,3685,3687,3690,3691,3693,3694,3697,3700,3706,3708,3710,3714,3723,3725,3728,3731,3734,3735,3749,3756,3759,3763,3771,3775,3777,3784,3786,3796,3798,3799,3802,3806,3812,3816,3817,3823,3825,3826,3827,3830,3835,3836,3839,3847,3849,3852,3853,3859,3861,3862,3863,3867,3871,3881,3884,3885,3886,3887,3888,3889,3891,3892,3893,3898,3899,3901,3902,3909,3913,3917,3920,3923,3924,3927,3928,3931,3936,3938,3943,3949,3951,3953,3956,3958,3962,3969,3971,3975,3977,3978,3979,3982,3986,3988,3989,3994,3995,3996,3998,4001,4005,4006,4010,4012,4013,4016,4018,4019,4021,4028,4031,4033,4038,4039,4042,4043,4047,4049,4050,4054,4060,4072,4077,4084,4091,4093,4100,4101,4115,4116,4122,4124,4129,4133,4139,4142,4147,4148,4153,4156,4162,4164,4169,4171,4172,4173,4175,4176,4179,4181,4189,4197,4202,4204,4210,4212,4214,4221,4223,4226,4238,4240,4242,4244,4246,4247,4248,4249,4250,4252,4262,4264,4270,4274,4280,4281,4282,4283,4285,4287,4288,4290,4292,4293,4298,4301,4319,4326,4329,4337,4350,4352,4357,4360,4363,4366,4370,4373,4374,4376,4378,4386,4390,4391,4397,4405,4407,4415,4416,4417,4424,4425,4427,4429,4431,4436,4437,4440,4442,4452,4459,4471,4472,4473,4479,4489,4491,4492,4494,4497,4500,4504,4508,4510,4517,4521,4523,4524,4526,4529,4533,4534,4535,4538,4542,4544,4546,4552,4555,4556,4563,4566,4567,4572,4584,4587,4588,4591,4593,4596,4600,4601,4607,4608,4611,4617,4625,4626,4627,4631,4634,4637,4641,4642,4644,4650,4651,4652,4654,4656,4657,4659,4666,4668,4670,4671,4673,4675,4682,4687,4689,4690,4692,4704,4705,4707,4708,4715,4716,4717,4718,4719,4721,4722,4723,4728,4730,4731,4732,4733,4734,4741,4742,4758,4759,4765,4771,4773,4774,4779,4788,4791,4799,4800,4810,4816,4817,4818,4819,4821,4822,4830,4831,4833,4841,4845,4847,4849,4850,4853,4854,4859,4860,4863,4864,4879,4880,4881,4882,4884,4885,4886,4890,4895,4897,4899,4900,4902,4904,4906,4909,4910,4913,4916,4920,4921,4925,4926,4935,4939,4943,4944,4948,4949,4950,4954,4955,4956,4957,4958,4963,4964,4965,4966,4968,4970,4971,4973,4974,4976,4979,4981,4984,4987,4989,4992
+    ]; // .length = 1281 (previously 699)
+    // console.timeEnd("populate fastSeedArray"); // populate fastSeedArray: 0.005126953125 ms
     sameResourceClasses.remove("settingViewToggle");
     // return true; // AKA visible, because NO LONGER `visibility: hidden;`
   } else {
@@ -337,7 +408,15 @@ updateMapMode(
 
 
 // >>> IN CONCLUSION, if PERFECTION re. periodization is most important use 2ndCombo (4294967296) else 1st (233280)
-let createRandomWithSeed_FASTER_REPEATS_EARLY=s=>(s=Math.abs(isNaN(s)?Date.now():s),_=>(s=(9301*s+49297)%233280,s/233280));
+let createRandomWithSeed_FASTER_REPEATS_EARLY=seed=>{
+  // console.log("SEED:", seed); debugger;
+  seed=Math.abs(isNaN(seed)?Date.now():seed);
+  return _=>(
+    DEBUG_SEEDS_TRACK && debugStack.seeds.push(seed),  // add to debugStack.fastSeedArrayForNormalMap -- later used by lookupFastSeed()
+    seed=(9301*seed+49297)%233280,
+    seed/233280
+  )
+};
 // let createRandomWithSeed_SLOWER_REPEATS_LATER=s=>(s=Math.abs(isNaN(s)?Date.now():s),_=>(s=(1664525*s+1013904223)%4294967296,s/4294967296));
 const createRandomWithSeed = createRandomWithSeed_FASTER_REPEATS_EARLY;
 // let rnd = createRandomWithSeed(SEED); // then use rnd() instead of Math.random()
@@ -345,7 +424,8 @@ const createRandomWithSeed = createRandomWithSeed_FASTER_REPEATS_EARLY;
 const MathRandom = Math.random;
 // CONFIRMED: one-time pre-cached "Math.random" alias = faster, because no OBJECT.KEY lookup each time
 
-const random = DEBUG_USE_RANDOM_WITH_SEED ? createRandomWithSeed(DEBUG_RANDOM_SEED) : MathRandom;
+const randomDefault = DEBUG_USE_RANDOM_WITH_SEED ? createRandomWithSeed(DEBUG_RANDOM_SEED) : MathRandom;
+let random;
 
 // shuffleInPlace() is used to randomize both the resources and the numbers.
 // Following that, it shuffles the Tiles array created in generateTileContent().
@@ -354,21 +434,22 @@ const shuffleInPlace = array => {
 
   // let seemed slightly faster than var (or does it compile to same?)
   // let i = array.length - 1, x, temp;
-
+  // let randomCount = 0;
   // ? while slightly faster than for() likely due to less overhead when you include (all;three;parts)
   // while(i > 0) {
-  for( let i = array.length - 1; i > 0; ) {
-
+  for (let i = array.length - 1; i > 0;) {
+    // randomCount ++;
     // "calc | 0" faster than "Math.floor(calc)": bitwise math, no OBJECT.KEY lookup
     // x = random() * (i + 1) | 0;
     let x = random() * (i + 1) | 0;
-
+    // console.log("???x:", x);
     // temp faster than destructuring [array[x], array[i--]] = [array[i], array[x]]
     // temp = array[i];
     let temp = array[i];
     array[i--] = array[x];
     array[x] = temp;
   };
+  // console.error(randomCount, array.length); // randomCount = ( .length - 1 ) always ... so 18 17 17
 
   // return array;
 };
@@ -454,11 +535,20 @@ const toggleSetting = (setting) => { // called via HTML (checkboxes within <sect
 
 
 // Create and return the array of tiles { chit: 2..12/0, resource: "-name-" }
-// that fillTiles() uses to display the tiles to the board in HTML form.
+// that fillTiles uses to display the tiles to the board in HTML form.
 const generateTileContent = () => {
 
-  shuffleInPlace(globalNumArray);
-  shuffleInPlace(globalResourceArray);
+  if(DEBUG_SEEDS_TRACK) {
+    if(debugStack.firstSeed === null) {
+      if(debugStack.seeds.length > 0) {
+        debugStack.firstSeed = debugStack.seeds[0]; // always keep the ORIGINAL seed
+      };
+    };
+    debugStack.seeds = []; // likely no slower than debugStack.seeds.length = 0;
+  };
+
+  shuffleInPlace(globalNumArray); // array.length = 19
+  shuffleInPlace(globalResourceArray); // array.length = 18
 
   // Initialize the array to hold completed tiles.
   const tiles = [];
@@ -484,7 +574,7 @@ const generateTileContent = () => {
   };
 
   // Shuffles and returns the array of "filled" tile objects.
-  shuffleInPlace(tiles);
+  shuffleInPlace(tiles); // array.length = 18
 
   return tiles;
 };
@@ -713,34 +803,75 @@ const shuffleIsValid = tilesArray => {
   return true;
 };
 
+const optionsAllUncheckedAndNormalMap = () => (
+  !adjacent_6_8
+  && !adjacent_2_12
+  && !adjacent_same_numbers
+  && !adjacent_same_resource
+  && !desert_in_center
+  && !resource_multiple_6_8
+  && globalMapMode === "normal"
+);
+
 // This function ties together the results of generateTileContent() and drawTiles().
 // In other words, it populates the HTML created by drawTiles() with the content
 // created by generateTileContent().
-const fillTiles = () => {
+const fillTiles = (randomSeed, durationMaxMs) => {
+
   let tiles;
 
-// console.log({globalSeed: globalSeed}); debugger;
+  if (randomSeed != null) {
+    random = createRandomWithSeed(randomSeed);
+  } else if (!DEBUG_SKIP_LOOKUP_FAST && optionsAllUncheckedAndNormalMap()) {
+    // debugger;
+    random = createRandomWithSeed(lookupFastSeed());
+  } else {
+    random = randomDefault;
+  };
 
-// debugger;
-console.time("fillTile");
-for(let runs = 0; runs < DEBUG_RUNS_FILLTILES; runs ++) {
 
-// globalSeed = 52; // takes longer than 42 (950ms for 5 runs)
-// debugger; // HOW ON EARTH IS THIS EVER PRODUCING A NEW SERIES OF NUMBERS?
 
-  do {
-    tiles = generateTileContent();
-    if(DEBUG_LOG_TILES_BEFORE_VALID)console.info("\n\n", tiles);
-  } while (!shuffleIsValid(tiles));
+  // MUST be reset here -- not inside generateTileContent() otherwise that takes FOREEEVVVEEER to finish!
+  globalNumArray = NUM_ARRAY.slice(0);
+  globalResourceArray = RESOURCE_ARRAY.slice(0);
 
-  
+  // debugger;
+  let ended = 0, start = performance.now();
+  // console.time("fillTile");
+
+  for(let runs = 0; runs < DEBUG_RUNS_FILLTILES; runs ++) {
+
+    // debugger;
+    do {
+      tiles = generateTileContent();
+      if(DEBUG_LOG_TILES_BEFORE_VALID)console.info("\n\n", tiles);
+    } while (!shuffleIsValid(tiles));
+
+    // if(DEBUG_LOG_TILES_AFTER_FILL)console.info( ">>>shuffleIsValid:", stringify(tiles, 0, "  ") );
+    // if(DEBUG_LOG_TILES_AFTER_FILL)console.info( ">>>shuffleIsValid:", tiles );
+
+  };
+
+  ended = performance.now();
+  // console.timeEnd("fillTile");
+  globalDuration = ended - start;
+  if (!DEBUG_SEEDS_TRACK) console.info("fillTile:", globalDuration + " ms");
+
   // if(DEBUG_LOG_TILES_AFTER_FILL)console.info( ">>>shuffleIsValid:", stringify(tiles, 0, "  ") );
-  // if(DEBUG_LOG_TILES_AFTER_FILL)console.info( ">>>shuffleIsValid:", tiles );
+  if(DEBUG_LOG_TILES_AFTER_FILL)console.info( ">>>shuffleIsValid:", tiles );
 
-};
-console.timeEnd("fillTile");
-// if(DEBUG_LOG_TILES_AFTER_FILL)console.info( ">>>shuffleIsValid:", stringify(tiles, 0, "  ") );
-if(DEBUG_LOG_TILES_AFTER_FILL)console.info( ">>>shuffleIsValid:", tiles );
+  if (DEBUG_SEEDS_TRACK) {
+    if (optionsAllUncheckedAndNormalMap()) {
+      if (!durationMaxMs || globalDuration <= durationMaxMs) {
+        // console.log( debugStack.seeds.length === ( !globalMapMode ? 83 : (19 + 18 + 18 - 3) ) ); // = (60 - 5) - 3 = (55) - 3 = 52
+        debugStack.fastSeedArrayForNormalMap.push({ [debugStack.firstSeed]: globalDuration });
+        // console.log(debugStack.firstSeed, JSON.stringify(fastSeedArrayForNormalMap, 0, "  "));
+      };
+      // debugger;
+    };
+    debugStack.seeds = []; // likely no slower than debugStack.seeds.length = 0;
+    debugStack.firstSeed = null;
+  };
 
   // update the View
   redrawTiles(tiles);
@@ -812,14 +943,17 @@ const start = (skipDrawTiles, skipFillTiles) => {
   if (!skipDrawTiles) drawTiles();
 
   setTimeout(() => { // required, otherwise you NEVER SEE disableBuildButton's CSS update...
+
     if (!skipFillTiles) fillTiles();
+    // if (!skipFillTiles) fillTiles(DEBUG_RANDOM_SEED);
+
     enableBuildButton();
   }, 30);
 
 };
 
 const test_js_only = () => {
-  console.log("hiya -_-");
+  console.info("hiya -_-");
   // debugger;
 
   const skipFillTiles = DEBUG_SKIP_FILLTILES_ON_LOAD
