@@ -545,11 +545,9 @@ const selectMode = () => {
 };
 
 const updateBuildButton = enabled => {
-  const WAIT = "⏳"; // ⌚🕐⌛⏳
   const btn = doc.getElementById("btnBuild");
   if(btn.style) {
     btn.disabled = !enabled;
-    btn.innerHTML = enabled ? "BUILD" : `<small>${WAIT}<small>`;
     if (enabled) setTimeout( () => btn.focus(), 4 );
   };
 };
@@ -1006,13 +1004,10 @@ const start = (skipDrawTiles, skipFillTiles) => {
 
   if (!skipDrawTiles) drawTiles();
 
-  setTimeout(() => { // required, otherwise you NEVER SEE disableBuildButton's CSS update...
+  if (!skipFillTiles) fillTiles();
+  // if (!skipFillTiles) fillTiles(DEBUG_RANDOM_SEED);
 
-    if (!skipFillTiles) fillTiles();
-    // if (!skipFillTiles) fillTiles(DEBUG_RANDOM_SEED);
-
-    enableBuildButton();
-  }, 30);
+  enableBuildButton();
 
 };
 
@@ -1031,28 +1026,7 @@ const test_js_only = () => {
 // Start the board. Do this when page is first opened, or when mode is changed.
 const initialLoadEventName = !!"LOAD" ? "load" : "DOMContentLoaded";
 
-const CSSpreloadClasses = (doc, msDelay, ...classes) => {
-  let el, loadNextClass = () => (
-    classes.length
-    ? setTimeout(
-      loadNextClass,
-      msDelay,
-      el.className = classes.shift()
-    )
-    : doc.body.removeChild(el)
-  );
-
-  return doc.body && loadNextClass(
-    classes = classes.flat(),
-    doc.body.appendChild(
-      el = doc.createElement("span")
-    )
-  );
-};
-
 const initialLoad = evt => {
-
-  CSSpreloadClasses(doc, 9, globalResourceTypes);
 
   const skipFillTiles = DEBUG_SKIP_FILLTILES_ON_LOAD
   && ( !!evt || !"evt NOT passed therefore NEVER skipFillTiles" );
